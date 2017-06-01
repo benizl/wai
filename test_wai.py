@@ -12,8 +12,9 @@ from math import pi
 
 t = numpy.linspace(0, 1, 1000)
 n = numpy.random.normal(scale=0.1, size=t.shape)
-#data = [scipy.signal.square(t * 5 * 2 * pi) + n, t]
+# data = [scipy.signal.square(t * 5 * 2 * pi) + n, t]
 data = [numpy.sin(t*5*2*pi) + n, t]
+# data = [[0, 0, 1, 1, 0, 0, 1, 1], [0,1,2,3,4,5,6,7]]
 m = TimeSeriesMeasurementSet()
 
 start = time.clock()
