@@ -4,7 +4,6 @@ from math import floor, ceil, sqrt, pi
 
 from wai._base import _Measurator, _BaseMeasurementSet
 
-
 default_configuration = {
     'histogram bins' : 'sqrt',
 }
@@ -20,8 +19,7 @@ class Histogram(_TimeSeriesMeasurator):
 
     def measure(self, data, state, configuration):
         bins = configuration['histogram bins']
-
-        state['histogram'] = numpy.histogram(data[0], bins)
+        state['histogram'] = numpy.histogram(data[0], bins=bins)
         
 
 class Levels(_TimeSeriesMeasurator):

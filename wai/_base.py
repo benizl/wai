@@ -6,14 +6,17 @@ class _Measurator(object):
     @classmethod
     def all_measurators(cls):
         for subclass in cls.__subclasses__():
-            yield from subclass.all_measurators()
+            # the right move is 'yield from' but we
+            # still need to support Python 2.x
+            for m in subclass.all_measurators():
+                yield m
             yield subclass
 
     def measure(self, data, state, configuration):
         pass
 
 
-class _BaseMeasurementSet():
+class _BaseMeasurementSet(object):
 
     def __init__(self, base_class, measurements='all', configuration=None):
         self.base_class = base_class
