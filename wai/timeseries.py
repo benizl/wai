@@ -72,7 +72,7 @@ class Edges(_TimeSeriesMeasurator):
                 r = (d2 - high_thres) / (d2 - d1)
                 t = r * t2 + (1 - r) * t1
                 li, lt = last
-                rising_points.append((floor((i + li) / 2), (t + lt) / 2, t - lt))
+                rising_points.append((int((i + li) / 2), (t + lt) / 2, t - lt))
                 detect_state = 'falling high'
             if d1 > high_thres and d2 <= high_thres and detect_state in ['falling high', 'start']:
                 r = (d2 - high_thres) / (d2 - d1)
@@ -83,7 +83,7 @@ class Edges(_TimeSeriesMeasurator):
                 r = (d2 - low_thres) / (d2 - d1)
                 t = r * t2 + (1 - r) * t1
                 li, lt = last
-                falling_points.append((floor((i + li) / 2), (t + lt) / 2, t - lt))
+                falling_points.append((int((i + li) / 2), (t + lt) / 2, t - lt))
                 detect_state = 'rising low'
         
         state['rising edge idx'], state['rising edge'], rise_time = zip(*rising_points) if len(rising_points) else ([], [], [])
