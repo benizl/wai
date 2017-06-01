@@ -52,30 +52,47 @@ class Shoot(_TimeSeriesMeasurator):
 
 
 class Edges(_TimeSeriesMeasurator):
-    provides = ['rising edge', 'falling edge', 'rising edge idx', 'falling edge idx']
+    provides = ['rising edge', 'falling edge', 'rising edge idx', 'falling edge idx', 'rise time', 'fall time', 'rise time std', 'fall time std']
     requires = ['high level', 'low level']
 
     def measure(self, data, state, configuration):
-        centre = (state['high level'] - state['low level']) / 2 + state['low level']
+        low_thres = state['low level'] + 0.1 * (state['high level'] - state['low level'])
+        high_thres = state['low level'] + 0.9 * (state['high level'] - state['low level'])
 
-        state['rising edge'] = []
-        state['falling edge'] = []
+        rising_points = []
+        falling_points = []
 
-        state['rising edge idx'] = []
-        state['falling edge idx'] = []
-
+        detect_state = 'start'
+        last = (0,0)
         for i, d1, d2, t1, t2 in zip(range(len(data[0])), data[0], data[0][1:], data[1], data[1][1:]):
-            if d1 <= centre and d2 > centre:
-                r = (d2 - centre) / (d2 - d1)
+            if d1 <= low_thres and d2 > low_thres and detect_state in ['rising low', 'start']:
+                r = (d2 - low_thres) / (d2 - d1)
                 t = r * t2 + (1 - r) * t1
-                state['rising edge'].append(t)
-                state['rising edge idx'].append(i)
-            elif d1 > centre and d2 <= centre:
-                r = (d2 - centre) / (d2 - d1)
+                last = (i,t)
+                detect_state = 'rising high'
+            if d1 <= high_thres and d2 > high_thres and detect_state in ['rising high']:
+                r = (d2 - high_thres) / (d2 - d1)
                 t = r * t2 + (1 - r) * t1
-                state['falling edge'].append(t)
-                state['falling edge idx'].append(i)
+                li, lt = last
+                rising_points.append((floor((i + li) / 2), (t + lt) / 2, t - lt))
+                detect_state = 'falling high'
+            if d1 > high_thres and d2 <= high_thres and detect_state in ['falling high', 'start']:
+                r = (d2 - high_thres) / (d2 - d1)
+                t = r * t2 + (1 - r) * t1
+                last = (i,t)
+                detect_state = 'falling low'
+            if d1 > low_thres and d2 <= low_thres and detect_state in ['falling low']:
+                r = (d2 - low_thres) / (d2 - d1)
+                t = r * t2 + (1 - r) * t1
+                li, lt = last
+                falling_points.append((floor((i + li) / 2), (t + lt) / 2, t - lt))
+                detect_state = 'rising low'
+        
+        state['rising edge idx'], state['rising edge'], rise_time = zip(*rising_points) if len(rising_points) else ([], [], [])
+        state['falling edge idx'], state['falling edge'], fall_time = zip(*falling_points) if len(falling_points) else ([], [], [])
 
+        state['rise time'], state['rise time std'] = (numpy.average(rise_time), numpy.std(rise_time)) if len(rise_time) else ([], [])
+        state['fall time'], state['fall time std'] = (numpy.average(fall_time), numpy.std(fall_time)) if len(fall_time) else ([], [])
 
 class Statistics(_TimeSeriesMeasurator):
     provides = ['mean', 'std', 'cycle mean', 'cycle std']
@@ -97,63 +114,6 @@ class Statistics(_TimeSeriesMeasurator):
         
         state['cycle mean'] = numpy.average(trimmed)
         state['cycle std'] = numpy.std(trimmed)
-        
-
-
-class EdgeRates(_TimeSeriesMeasurator):
-    provides = ['rise time', 'fall time', 'rise time std', 'fall time std']
-    requires = ['high level', 'low level', 'rising edge idx', 'falling edge idx']
-
-    def __init__(self):
-        self._risetimes = []
-        self._falltimes = []
-
-    def measure(self, data, state, configuration):
-        low_thres = state['low level'] + 0.1 * (state['high level'] - state['low level'])
-        high_thres = state['low level'] + 0.9 * (state['high level'] - state['low level'])
-
-        for edge in state['rising edge idx']:
-            # This zip/reversed thing looks ugly, but having it in this order
-            # keeps everything as generators rather than having to actually
-            # build the full list, speeding up execution and helping memory
-            lt = ht = None
-            for d1, d2, t1, t2 in zip(reversed(data[0][:edge+1]), reversed(data[0][2:edge+2]), reversed(data[1][1:edge+1]), reversed(data[1][2:edge+2])):
-                if d1 <= low_thres and d2 > low_thres:
-                    r = (d2 - low_thres) / (d2 - d1)
-                    lt = r * t2 + (1 - r) * t1
-                    break
-            
-            for d1, d2, t1, t2 in zip(data[0][edge:], data[0][edge+1:], data[1][edge:], data[1][edge+1:]):
-                if d1 <= high_thres and d2 > high_thres:
-                    r = (d2 - high_thres) / (d2 - d1)
-                    ht = r * t2 + (1 - r) * t1
-                    break
-            
-            if ht is not None and lt is not None:
-                self._risetimes.append(lt - ht)
-
-        for edge in state['falling edge idx']:
-            lt = ht = None
-            for d1, d2, t1, t2 in zip(data[0][edge:], data[0][edge+1:], data[1][edge:], data[1][edge+1:]):
-                if d1 > low_thres and d2 <= low_thres:
-                    r = (d2 - low_thres) / (d2 - d1)
-                    lt = r * t2 + (1 - r) * t1
-                    break
-            
-            for d1, d2, t1, t2 in zip(reversed(data[0][:edge+1]), reversed(data[0][2:edge+2]), reversed(data[1][1:edge+1]), reversed(data[1][2:edge+2])):
-                if d1 > high_thres and d2 <= high_thres:
-                    r = (d2 - high_thres) / (d2 - d1)
-                    ht = r * t2 + (1 - r) * t1
-                    break
-            
-            if ht is not None and lt is not None:
-                self._falltimes.append(ht - lt)
-
-            state['rise time'] = numpy.average(self._risetimes)
-            state['fall time'] = numpy.average(self._falltimes)
-
-            state['rise time std'] = numpy.std(self._risetimes)
-            state['fall time std'] = numpy.std(self._falltimes)
 
 
 class CycleParameters(_TimeSeriesMeasurator):
@@ -187,10 +147,13 @@ class SineParameters(_TimeSeriesMeasurator):
         def sine_objective(x, freq, amplitude, phase, offset):
             return numpy.sin(x * freq * 2 * pi + phase) * amplitude + offset
         
-        if len(state['rising edge']):
+        # Don't try and fit a sine if we don't have an estimated period, i.e. at least
+        # one complete cycle
+        if state['period']:
             est_phase = state['rising edge'][0] / state['period'] * 2 * pi
         else:
-            est_phase = 0
+            state['sine frequency'], state['sine amplitude'], state['sine phase'], state['sine offset'] = None, None, None, None
+            return
 
         p0 = [state['frequency'], state['amplitude'], est_phase, state['cycle mean']]
 
