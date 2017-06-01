@@ -175,3 +175,6 @@ class TimeSeriesMeasurementSet(_BaseMeasurementSet):
             _TimeSeriesMeasurator,
             measurements,
             config)
+
+def measure(measurement, data, configuration={}):
+    return TimeSeriesMeasurementSet([measurement], configuration).measure(data)[measurement]

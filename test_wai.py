@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import wai.timeseries
 from wai.timeseries import TimeSeriesMeasurementSet
 
 from pylab import *
@@ -28,3 +29,5 @@ plot(ms['sine offset'] +
     ms['sine amplitude'] *
         numpy.sin(ms['sine frequency'] * t * 2 * pi + ms['sine phase']))
 show()
+
+print(wai.timeseries.measure('rising edge', data))
