@@ -23,10 +23,11 @@ class Histogram(_TimeSeriesMeasurator):
         
 
 class Levels(_TimeSeriesMeasurator):
-    provides = ['high level', 'low level', 'amplitude']
+    provides = ['high level', 'low level', 'amplitude', 'rms', 'peak-peak', 'mean', 'std']
     requires = ['histogram']
 
     def measure(self, data, state, configuration):
+        from numpy import sqrt, mean, square
         h = list(zip(*state['histogram']))
 
         bin_step = h[1][1] - h[0][1]
@@ -35,9 +36,14 @@ class Levels(_TimeSeriesMeasurator):
         bottom = h[:split]
         top = h[split:]
 
+        state['mean'] = numpy.average(data)
+        state['std'] = numpy.std(data)
+
         state['low level'] = max(bottom)[1] + bin_step / 2
         state['high level'] = max(top)[1] + bin_step / 2
         state['amplitude'] = (state['high level'] - state['low level']) / 2
+        state['peak-peak'] = max(data[0]) - min(data[0])
+        state['rms'] = sqrt(mean(square(data[0])))
 
 
 class Shoot(_TimeSeriesMeasurator):
@@ -92,14 +98,12 @@ class Edges(_TimeSeriesMeasurator):
         state['rise time'], state['rise time std'] = (numpy.average(rise_time), numpy.std(rise_time)) if len(rise_time) else ([], [])
         state['fall time'], state['fall time std'] = (numpy.average(fall_time), numpy.std(fall_time)) if len(fall_time) else ([], [])
 
-class Statistics(_TimeSeriesMeasurator):
-    provides = ['mean', 'std', 'cycle mean', 'cycle std']
+class CycleStatistics(_TimeSeriesMeasurator):
+    provides = ['cycle mean', 'cycle std', 'cycle rms']
     requires = ['rising edge idx', 'falling edge idx']
 
     def measure(self, data, state, configuration):
-        state['mean'] = numpy.average(data)
-        state['std'] = numpy.std(data)
-
+        from numpy import sqrt, mean, square
         rei = state['rising edge idx']
         fei = state['falling edge idx']
 
@@ -112,6 +116,7 @@ class Statistics(_TimeSeriesMeasurator):
         
         state['cycle mean'] = numpy.average(trimmed)
         state['cycle std'] = numpy.std(trimmed)
+        state['cycle rms'] = sqrt(mean(square(trimmed)))
 
 
 class CycleParameters(_TimeSeriesMeasurator):
