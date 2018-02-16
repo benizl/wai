@@ -16,10 +16,10 @@ n = numpy.random.normal(scale=0.05, size=t.shape)
 data = [scipy.signal.square(t * 5 * 2 * pi) + n, t]
 # data = [numpy.sin(t*5*2*pi) + n, t]
 # data = [[0, 0, 1, 1, 0, 0, 1, 1], [0,1,2,3,4,5,6,7]]
-m = TimeSeriesMeasurementSet()
+m = TimeSeriesMeasurementSet(data)
 
 start = time.clock()
-ms = m.measure(data)
+ms = m.measure()
 print(time.clock() - start)
 print(ms)
 

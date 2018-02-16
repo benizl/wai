@@ -206,15 +206,15 @@ class SineParameters(_TimeSeriesMeasurator):
         state['sine frequency'], state['sine amplitude'], state['sine phase'], state['sine offset'] = fit
 
 class TimeSeriesMeasurementSet(_BaseMeasurementSet):
-    def __init__(self, measurements='all', configuration={}):
+    def __init__(self, data, configuration={}):
         config = {}
         config.update(default_configuration)
         config.update(configuration)
 
         super(TimeSeriesMeasurementSet, self).__init__(
             _TimeSeriesMeasurator,
-            measurements,
+            data,
             config)
 
 def measure(measurement, data, configuration={}):
-    return TimeSeriesMeasurementSet([measurement], configuration).measure(data)[measurement]
+    return TimeSeriesMeasurementSet(data, configuration).measure([measurement])[measurement]

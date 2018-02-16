@@ -18,31 +18,19 @@ class _Measurator(object):
 
 class _BaseMeasurementSet(object):
 
-    def __init__(self, base_class, measurements='all', configuration=None):
+    def __init__(self, base_class, data, configuration=None):
         self.base_class = base_class
-
-        if isinstance(measurements, str):
-            measurements = [measurements]
-        
-        measurement_classes = set()
-        for m in measurements:
-            if m == 'all':
-                measurement_classes |= set(base_class.all_measurators())
-            else:
-                measurement_classes |= self._provider(m)
-        
-        # Instantiate all required classes. We'll keep the objects
-        # around in the future so more data can be added
-        self._measurators = [ cls() for cls in measurement_classes ]
-
+        self.data = data
         self.configuration = configuration
+
+        self.state = {}
 
 
     def _deps_satisfied(self, measurement, state):
         for r in measurement.requires:
             if not r in state:
                 return False
-        
+
         return True
 
     def _provider(self, m):
@@ -55,23 +43,37 @@ class _BaseMeasurementSet(object):
         else:
             raise Exception("Can't find provider for {}".format(m))
 
-    def measure(self, data):
-        to_measure = set(self._measurators)
-        state = {}
+    def measure(self, measurements='all'):
 
-        if len(data) != 2:
-            data = [data, range(len(data))]
+        if isinstance(measurements, str):
+            measurements = [measurements]
+
+        measurement_classes = set()
+        for m in measurements:
+            if m == 'all':
+                measurement_classes |= set(self.base_class.all_measurators())
+            else:
+                measurement_classes |= self._provider(m)
+
+        # Instantiate all required classes. We'll keep the objects
+        # around in the future so more data can be added
+        self._measurators = [ cls() for cls in measurement_classes ]
+
+        to_measure = set(self._measurators)
+
+        if len(self.data) != 2:
+            self.data = [self.data, range(len(self.data))]
 
         while len(to_measure):
             processed = set()
             for try_measure in to_measure:
-                if self._deps_satisfied(try_measure, state):
-                    try_measure.measure(data, state, self.configuration)
+                if self._deps_satisfied(try_measure, self.state):
+                    try_measure.measure(self.data, self.state, self.configuration)
                     processed |= set([try_measure])
-            
+
             if not len(processed):
                 raise Exception("Can't make progress through measurements, must be an invalid configuration somewhere")
 
             to_measure -= processed
 
-        return state
+        return self.state
