@@ -22,14 +22,10 @@ def _interp_max(x, y, start=None):
 
     start = start or x[int(len(x)/2)]
     bw = x[1] - x[0]
-    print(x[0], x[1], x[-1])
     i = interp1d(x, -y, kind='linear')
-    def j(x):
-        print(x)
-        return i(x)
 
-    m = minimize(j, start, method='SLSQP', bounds=[(x[0] + bw / 2, x[-1] - bw / 2)])
-    return (m.x[0], -m.fun[0])
+    m = minimize(i, start, method='SLSQP', bounds=[(x[0] + bw / 2, x[-1] - bw / 2)])
+    return (m.x[0], -i(m.x[0]))
 
 class _FrequencyMeasurator(_Measurator):
     pass
@@ -134,12 +130,13 @@ class Peaks(_FrequencyMeasurator):
             state['peak freqs'], state['peak amplitudes'], state['peak snrs'] = None, None, None
 
 
-def PeakWidths(_FrequencyMeasurator):
+class PeakWidths(_FrequencyMeasurator):
     provides = ['peak 3dB', 'peak 6dB', 'peak occupied']
     requires = ['peak idxs', 'peak amplitudes', 'noise floor']
 
     def _width(self, data, idx, threshold):
         from scipy.interpolate import interp1d
+        from scipy.optimize import minimize
 
         i = interp1d(data[1], data[0], kind='cubic')
         left = minimize(lambda x: (i(x) - threshold)**2, idx - 2)
@@ -152,12 +149,13 @@ def PeakWidths(_FrequencyMeasurator):
         state['peak 6dB'] = [ self._width(data, i, p / 4) for i, p in zip(state['peak idxs'], state['peak amplitudes']) ]
         state['peak occupied'] = [ self._width(data, i, state['noise floor']) for i in state['peak idxs'] ]
 
-def Distortion(_FrequencyMeasurator):
+class Distortion(_FrequencyMeasurator):
     provides = ['thd']
     requires = ['peak frequency', 'peak amplitude']
 
     def measure(self, data, state, configuration):
         from scipy.interpolate import interp1d
+        from scipy.optimize import minimize
         signal_power = state['peak amplitude']**2 # power = volts^2
         f = 2 * state['peak frequency']
         harmonic_power = 0

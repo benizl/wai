@@ -30,8 +30,8 @@ for r in [ ((r, r),(-1, 1)) for r in ms['falling edge idx']]:
     plot(*r, 'c')
 
 plot(data[0],'.')
-plot(ms['amplitude'] / 2 * numpy.sin(ms['frequency'] * t * 2 * pi + ms['rising edge'][0]) + ms['cycle mean'])
+plot(ms['amplitude'] / 2 * numpy.sin(ms['frequency'] * t * 2 * pi + ms['rising edge'][0]) + ms['cycle mean'], 'r')
 plot(ms['sine offset'] +
     ms['sine amplitude'] *
-        numpy.sin(ms['sine frequency'] * t * 2 * pi + ms['sine phase']))
+        numpy.sin(ms['sine frequency'] * t * 2 * pi + ms['sine phase']), 'g')
 show()
