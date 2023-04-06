@@ -23,7 +23,10 @@ class Histogram(_TimeSeriesMeasurator):
         bins = configuration['histogram bins']
         state['histogram'] = numpy.histogram(data[0], bins=bins)
         for _ in range(4):
-            # Increase bin size to mitigate significant errors in high and low level (particularly evident in Square waves)
+            # Iteratively increase bin count, up to 4 times, until no single bin in either half of the histogram
+            # contains more than 80% of that half's points. This is useful when the points are tighly concentrated
+            # around more than one point, or with significant outliers. Square waves are a good example where,
+            # without this, all the points end up in two bins: A high bin and a low bin.
             h = list(zip(*state['histogram']))
             bin_step = h[1][1] - h[0][1]
             split = int(len(h) / 2)
