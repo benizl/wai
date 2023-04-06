@@ -4,6 +4,8 @@ from math import floor, ceil, sqrt, pi
 
 from wai._base import _Measurator, _BaseMeasurementSet
 
+import warnings
+
 default_configuration = {
     'histogram bins' : 'sqrt',
 }
@@ -20,6 +22,19 @@ class Histogram(_TimeSeriesMeasurator):
     def measure(self, data, state, configuration):
         bins = configuration['histogram bins']
         state['histogram'] = numpy.histogram(data[0], bins=bins)
+        for _ in range(4):
+            # Increase bin size to mitigate significant errors in high and low level (particularly evident in Square waves)
+            h = list(zip(*state['histogram']))
+            bin_step = h[1][1] - h[0][1]
+            split = int(len(h) / 2)
+            bottom = h[:split]
+            top = h[split:]
+            if max(bottom)[0] < 0.8*(sum(state['histogram'][0][:split])) and max(top)[0] < 0.8*(sum(state['histogram'][0][split:])):
+                break
+            bins = len(h) * 2
+            state['histogram'] = numpy.histogram(data[0], bins=bins)
+        else:
+            warnings.warn("Break before histogram corrected", RuntimeWarning)
 
 
 class Levels(_TimeSeriesMeasurator):
