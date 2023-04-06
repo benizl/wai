@@ -51,8 +51,8 @@ class Levels(_TimeSeriesMeasurator):
         bottom = h[:split]
         top = h[split:]
 
-        state['mean'] = numpy.average(data)
-        state['std'] = numpy.std(data)
+        state['mean'] = numpy.average(data[0])
+        state['std'] = numpy.std(data[0])
 
         state['low level'] = max(bottom)[1] + bin_step / 2
         state['high level'] = max(top)[1] + bin_step / 2
