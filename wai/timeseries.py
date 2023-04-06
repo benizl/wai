@@ -4,6 +4,8 @@ from math import floor, ceil, sqrt, pi
 
 from wai._base import _Measurator, _BaseMeasurementSet
 
+import warnings
+
 default_configuration = {
     'histogram bins' : 'sqrt',
 }
@@ -20,6 +22,22 @@ class Histogram(_TimeSeriesMeasurator):
     def measure(self, data, state, configuration):
         bins = configuration['histogram bins']
         state['histogram'] = numpy.histogram(data[0], bins=bins)
+        for _ in range(4):
+            # Iteratively increase bin count, up to 4 times, until no single bin in either half of the histogram
+            # contains more than 80% of that half's points. This is useful when the points are tighly concentrated
+            # around more than one point, or with significant outliers. Square waves are a good example where,
+            # without this, all the points end up in two bins: A high bin and a low bin.
+            h = list(zip(*state['histogram']))
+            bin_step = h[1][1] - h[0][1]
+            split = int(len(h) / 2)
+            bottom = h[:split]
+            top = h[split:]
+            if max(bottom)[0] < 0.8*(sum(state['histogram'][0][:split])) and max(top)[0] < 0.8*(sum(state['histogram'][0][split:])):
+                break
+            bins = len(h) * 2
+            state['histogram'] = numpy.histogram(data[0], bins=bins)
+        else:
+            warnings.warn("Break before histogram corrected", RuntimeWarning)
 
 
 class Levels(_TimeSeriesMeasurator):
@@ -36,8 +54,8 @@ class Levels(_TimeSeriesMeasurator):
         bottom = h[:split]
         top = h[split:]
 
-        state['mean'] = numpy.average(data)
-        state['std'] = numpy.std(data)
+        state['mean'] = numpy.average(data[0])
+        state['std'] = numpy.std(data[0])
 
         state['low level'] = max(bottom)[1] + bin_step / 2
         state['high level'] = max(top)[1] + bin_step / 2
