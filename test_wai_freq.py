@@ -26,13 +26,13 @@ config = {
 
 m = FrequencyMeasurementSet([p, f], configuration=config)
 
-start = time.clock()
+start = time.perf_counter()
 ms = m.measure()
-print(time.clock() - start)
+print(time.perf_counter() - start)
 print(ms)
 
 semilogy(f, p)
-semilogy(ms['peak freqs'], ms['peak amplitudes'], 'o')
+semilogy(ms['peak freqs'], ms['peak amplitudes dB'], 'o')
 show()
 
 print(wai.timeseries.measure('rising edge', data))

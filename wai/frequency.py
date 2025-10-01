@@ -9,6 +9,7 @@ default_configuration = {
     'peak method' : 'cwt',
     'peak ratio' : 10,
     'peak width' : 5,
+    'units' : 'Vpp',
 }
 
 def _interp_max(x, y, start=None):
@@ -22,7 +23,7 @@ def _interp_max(x, y, start=None):
 
     start = start or x[int(len(x)/2)]
     bw = x[1] - x[0]
-    i = interp1d(x, -y, kind='linear')
+    i = interp1d(x, -y, kind=kind)
 
     m = minimize(i, start, method='SLSQP', bounds=[(x[0] + bw / 2, x[-1] - bw / 2)])
     return (m.x[0], -i(m.x[0]))
@@ -30,58 +31,80 @@ def _interp_max(x, y, start=None):
 class _FrequencyMeasurator(_Measurator):
     pass
 
+class LinearLogData(_FrequencyMeasurator):
+    provides = ['data', 'log data']
+    requires = []
+    def measure(self, data, state, configuration):
+        # Pre-conditions:
+        # check there are negatives in dBm or dBVpp
+        # check there are no negatives in Vrms or Vpp
+        if configuration['units'].startswith('dB') and not any(val < 0 for val in data[0]):
+            import warnings
+            warnings.warn('No negative values in logarithmic data set, check units of data are dB')
+        if configuration['units'].startswith('V') and not all(val >= 0 for val in data[0]):
+            assert False, 'Negative values in linear data set, check config units'
+
+        if configuration['units'].startswith('V'):
+            state['data'] = data[0]
+            assert data[0].dtype == float, 'Values are integers'
+            data[0][(data[0] == 0.0)] = numpy.nextafter(0, 1)
+            state['log data'] = numpy.log(data[0])
+        if configuration['units'].startswith('dB'):
+            state['data'] = numpy.exp(data[0])
+            state['log data'] = data[0]
 
 class Histogram(_FrequencyMeasurator):
     provides = ['histogram', 'log histogram']
-    requires = []
+    requires = ['data', 'log data']
 
     def measure(self, data, state, configuration):
         bins = configuration['histogram bins']
-        state['histogram'] = numpy.histogram(data[0], bins=bins)
-
-        count, amp = numpy.histogram(numpy.log(data[0]), bins=bins)
-        amp = numpy.exp(amp)
-
-        state['log histogram'] = numpy.array([count, amp])
+        state['histogram'] = numpy.histogram(state['data'], bins=bins)
+        state['log histogram'] = numpy.histogram(state['log data'], bins=bins)
 
 class NoiseFloor(_FrequencyMeasurator):
-    provides = ['noise floor']
-    requires = ['histogram']
+    provides = ['noise floor V', 'noise floor dB']
+    requires = ['log histogram']
 
     def measure(self, data, state, configuration):
         from scipy.optimize import minimize
         from scipy.interpolate import interp1d
 
         # Generate an X-axis of bin centres rather than edges
-        h = state['log histogram']
+        h = (state['log histogram'][0], state['log histogram'][1])
         bin_width = h[1][1] - h[1][0]
         xs = h[1][:-1] + bin_width / 2
-        state['noise floor'] = _interp_max(xs, h[0])[0]
+        start = h[1][numpy.argmax(h[0])]
+        noise_floor = _interp_max(xs, h[0], start)[0]
+        state['noise floor V'] = numpy.exp(noise_floor)
+        state['noise floor dB'] = numpy.log(state['noise floor V'])
 
 class PeakLevel(_FrequencyMeasurator):
-    provides = ['peak level', 'peak frequency', 'peak idx']
-    requires = []
+    provides = ['peak level V', 'peak level dB', 'peak frequency', 'peak idx']
+    requires = ['data']
 
     def measure(self, data, state, configuration):
-        state['peak idx'] = numpy.argmax(data[0])
-        state['peak frequency'], state['peak level'] = _interp_max(data[1], data[0], start=state['peak idx'])
+        state['peak idx'] = numpy.argmax(state['data'])
+        state['peak frequency'], state['peak level V'] = _interp_max(data[1], state['data'], start=data[1][state['peak idx']])
+        state['peak level dB'] = numpy.log(state['peak level V'])
 
 class PeakSNR(_FrequencyMeasurator):
-    provides = ['snr']
-    requires = ['peak level', 'noise floor']
+    provides = ['snr V', 'snr dB']
+    requires = ['peak level V', 'noise floor V', 'peak level dB', 'noise floor dB']
 
     def measure(self, data, state, configuration):
-        state['snr'] = state['peak level'] / state['noise floor']
+        state['snr V'] = state['peak level V'] / state['noise floor V']
+        state['snr dB'] = numpy.log(state['snr V'])
 
 
 class OccupiedBW(_FrequencyMeasurator):
     provides = ['occupied bw']
-    requires = []
+    requires = ['data']
 
     def measure(self, data, state, configuration):
         from numpy import square, cumsum
         from scipy.interpolate import interp1d
-        cum_power = cumsum(square(data[0]))
+        cum_power = cumsum(square(state['data']))
 
         total_power = cum_power[-1]
         low_thresh = 0.005 * total_power
@@ -96,15 +119,15 @@ class OccupiedBW(_FrequencyMeasurator):
         state['occupied bw'] = f_high - f_low
 
 class Peaks(_FrequencyMeasurator):
-    provides = ['peak freqs', 'peak idxs', 'peak amplitudes', 'peak snrs']
-    requires = ['noise floor']
+    provides = ['peak freqs', 'peak idxs', 'peak amplitudes V', 'peak amplitudes dB', 'peak snrs V', 'peak snrs dB']
+    requires = ['data', 'noise floor V']
 
     def by_ratio(self, data, state, configuration):
         from scipy.signal import argrelmax
-        threshold = configuration['peak ratio'] * state['noise floor']
+        threshold = configuration['peak ratio'] * state['noise floor V']
 
-        candidates = argrelmax(data[0])[0]
-        state['peak idxs'] = [ p for p in candidates if data[0][p] > threshold ]
+        candidates = argrelmax(state['data'])[0]
+        state['peak idxs'] = [ p for p in candidates if state['data'][p] > threshold ]
 
     def by_cwt(self, data, state, configuration):
         from scipy.signal import find_peaks_cwt
@@ -112,7 +135,7 @@ class Peaks(_FrequencyMeasurator):
         if isinstance(w, int):
             w = numpy.arange(1, w)
 
-        state['peak idxs'] = find_peaks_cwt(data[0], w)
+        state['peak idxs'] = find_peaks_cwt(state['data'], w)
 
     def measure(self, data, state, configuration):
         method = configuration['peak method']
@@ -124,15 +147,18 @@ class Peaks(_FrequencyMeasurator):
             raise Exception("Unknown peak detection method %s" % method)
 
         if len(state['peak idxs']):
-            state['peak freqs'], state['peak amplitudes'] = zip(*[ _interp_max(data[1], data[0], start=s) for s in data[1][state['peak idxs']]])
-            state['peak snrs'] = [a / state['noise floor'] for a in state['peak amplitudes']]
+            state['peak freqs'], state['peak amplitudes V'] = zip(*[ _interp_max(data[1], state['data'], start=s) for s in data[1][state['peak idxs']]])
+            state['peak amplitudes dB'] = [ _interp_max(data[1], state['log data'], start=s)[1] for s in data[1][state['peak idxs']]]
+            state['peak snrs V'] = [a / state['noise floor V'] for a in state['peak amplitudes V']]
+            state['peak snrs dB'] = [a - state['noise floor dB'] for a in state['peak amplitudes dB']]
         else:
-            state['peak freqs'], state['peak amplitudes'], state['peak snrs'] = None, None, None
+            state['peak freqs'], state['peak amplitudes V'], state['peak snrs V'] = None, None, None
+            state['peak amplitudes dB'], state['peak snrs dB'] = None, None
 
 
 class PeakWidths(_FrequencyMeasurator):
     provides = ['peak 3dB', 'peak 6dB', 'peak occupied']
-    requires = ['peak idxs', 'peak amplitudes', 'noise floor']
+    requires = ['peak idxs', 'peak amplitudes V', 'noise floor V']
 
     def _width(self, data, idx, threshold):
         from scipy.interpolate import interp1d
@@ -145,22 +171,22 @@ class PeakWidths(_FrequencyMeasurator):
         return right.x - left.x
 
     def measure(self, data, state, configuration):
-        state['peak 3dB'] = [ self._width(data, i, p / 2) for i, p in zip(state['peak idxs'], state['peak amplitudes']) ]
-        state['peak 6dB'] = [ self._width(data, i, p / 4) for i, p in zip(state['peak idxs'], state['peak amplitudes']) ]
-        state['peak occupied'] = [ self._width(data, i, state['noise floor']) for i in state['peak idxs'] ]
+        state['peak 3dB'] = [ self._width(data, i, p / 2) for i, p in zip(state['peak idxs'], state['peak amplitudes V']) ]
+        state['peak 6dB'] = [ self._width(data, i, p / 4) for i, p in zip(state['peak idxs'], state['peak amplitudes V']) ]
+        state['peak occupied'] = [ self._width(data, i, state['noise floor V']) for i in state['peak idxs'] ]
 
 class Distortion(_FrequencyMeasurator):
     provides = ['thd']
-    requires = ['peak frequency', 'peak amplitude']
+    requires = ['data', 'peak frequency', 'peak amplitudes V', 'peak level V']
 
     def measure(self, data, state, configuration):
         from scipy.interpolate import interp1d
         from scipy.optimize import minimize
-        signal_power = state['peak amplitude']**2 # power = volts^2
+        signal_power = state['peak level V']**2 # power = volts^2
         f = 2 * state['peak frequency']
         harmonic_power = 0
 
-        i = interp1d(data[1], data[0])
+        i = interp1d(data[1], state['data'])
 
         while f < data[1][-1]:
             harmonic_power += i(f)**2

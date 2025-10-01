@@ -18,9 +18,9 @@ data = [scipy.signal.square(t * 5 * 2 * pi) + n, t]
 # data = [[0, 0, 1, 1, 0, 0, 1, 1], [0,1,2,3,4,5,6,7]]
 m = TimeSeriesMeasurementSet(data)
 
-start = time.clock()
+start = time.perf_counter()
 ms = m.measure()
-print(time.clock() - start)
+print(time.perf_counter() - start)
 print(ms)
 
 for r in [ ((r, r),(-1, 1)) for r in ms['rising edge idx']]:
